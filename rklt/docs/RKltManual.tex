@@ -1,0 +1,170 @@
+\documentclass[a4paper,10pt]{article}
+\usepackage[]{graphicx}
+\usepackage[]{times}
+\usepackage{geometry}
+\usepackage{framed}
+
+\geometry{verbose,a4paper,tmargin=1.5cm,bmargin=2cm,lmargin=2cm,rmargin=2cm}
+\renewcommand{\baselinestretch}{1.2}
+
+\title{Gici RKLT Manual \\ \small (version 1.1)}
+
+\author{
+GICI group \vspace{0.1cm} \\
+\small Department of Information and Communications Engineering \\
+\small Universitat Aut{\`o}noma Barcelona \\
+\small http://www.gici.uab.es  -  http://gici.uab.cat/GiciWebPage/downloads.php \\
+}
+
+\date{January 2010}
+
+\begin{document}
+\maketitle
+
+\section{Description}
+
+This software is an implementation of the Reversible Karhunen-Lo\^eve Transform (RKLT) to be used as spectral decorrelator.
+In addition it features many state-of-the-art techniques for spectral decorrelation:
+
+\begin{itemize}
+\item Lossy Karhunen-Lo\^eve Transform.
+\item Matrix factorizations for reversible integer mapping~\cite{HS01,GS04}.
+\item Covariance Subsampling~\cite{PTM+06,PTM+07a}.
+\item Clustered and Multi-level transforms~\cite{BS09,BS10}.
+\end{itemize}
+
+\section{Requirements}
+
+This software is programmed in Java, so you might need a JAVA Runtime Environment(JRE) to run this application.
+We have used SUN JAVA 1.5. 
+
+\begin{description}
+\item[JAI] The Java Advanced Imaging (JAI) library is used to load and save images in formats
+other than raw or pgm. The JAI library can be freely downloaded from \emph{http://java.sun.com}.
+\textbf{Note:} You don't need to have this library installed in order to compile the source code.
+
+\item[GSL] Eigendecomposition functions are from the GNU Scientific Library (GSL) and have been translated into Java.
+The authors of the of original code are Gerard Jungman and Brian Gough. (see source files for details)
+\end{description}
+
+\section{Usage}
+
+The application is provided in a single file, a jar file (\emph{dist/rklt.jar}), that contains the application.
+Along with the application, the source code is also provided. If you need to rebuild the jar file, you can use the \texttt{ant} command.
+
+To launch the application you can use the following command: 
+
+\begin{framed}
+\texttt{\$ java -Xmx1200m -jar dist/rklt.jar --help}
+\end{framed}
+
+In a GNU/Linux environment you can also use the shell script \texttt{rklt} situated at the root of the RKlt directory. 
+
+\begin{framed}
+\texttt{\$ ./rklt --help}
+\end{framed}
+
+Some examples of usage are provided below:
+
+\begin{itemize}
+\item Coding and decoding an image with the Reversible KLT:
+\begin{framed}%
+\vspace{-1em}%
+\begin{verbatim}
+$ ./rklt -i inptfile-16bpppb-bigendian-224x512x512.raw \
+         -o rkltfile-16bpppb-bigendian-224x512x512.raw \
+         -ig 224 512 512 3 0 -og 224 512 512 4 0 \
+         -ti side-information.file -D 0 -d 0
+
+$ ./rklt -i rkltfile-16bpppb-bigendian-224x512x512.raw \ 
+         -o outpfile-16bpppb-bigendian-224x512x512.raw \
+         -ig 224 512 512 4 0 -og 224 512 512 3 0 \
+         -ti side-information.file -D 0 -d 1 
+\end{verbatim}%
+\vspace{-1em}%
+\end{framed}
+
+\item Forward transform with covariance subsampling enabled:
+\begin{framed}%
+\vspace{-1em}%
+\begin{verbatim}
+$ ./rklt -i inptfile-16bpppb-bigendian-224x512x512.raw \
+         -o rkltfile-16bpppb-bigendian-224x512x512.raw \
+         -ig 224 512 512 3 0 -og 224 512 512 4 0 \
+         -ti side-information.file -D 0 -d 0 \
+         -es 0.01
+\end{verbatim}%
+\vspace{-1em}%
+\end{framed}
+
+\item Using the dynamic structure defined in~\cite{BS10}:
+\begin{framed}%
+\vspace{-1em}%
+\begin{verbatim}
+$ ./rklt -i inptfile-16bpppb-bigendian-224x512x512.raw \
+         -o rkltfile-16bpppb-bigendian-224x512x512.raw \
+         -ig 224 512 512 3 0 -og 224 512 512 4 0 \
+         -ti side-information.file -D 0 -d 0 \
+         -es 0.01 --enableClustering 2 56 1
+\end{verbatim}%
+\vspace{-1em}%
+\end{framed}
+
+\item Perform a lossy KLT and create a JPEG2000-compatible bitstream:
+\begin{framed}%
+\vspace{-1em}%
+\begin{verbatim}
+$ ./rklt -i infile.raw -ig $Z $Y $X 3 0 --lossy \
+         --dumpEquivalentMatrix KLT_matrix -d 0
+
+$ ./matrix_range_increase.sh "KLT_matrix.klt" $Z 16 \
+  | tr '\n' ',' | sed 's/,$/\n/' > "new_range.txt"
+
+$ echo -n "Mvector_coeffs:I2=" > "KLT_Matrix_KDU_param.txt"
+$ hexdump -v -e '"%f,"' "$TEMPFOLDER/KLT_matrices.means" \
+  | sed 's/,$//' >> "KLT_Matrix_KDU_param.txt"
+$ echo -n " Mmatrix_coeffs:I3=" >> "KLT_Matrix_KDU_param.txt"
+$ hexdump -v -e '"%f,"' "$TEMPFOLDER/KLT_matrices.klt" \
+  | sed 's/,$//' >> "KLT_Matrix_KDU_param.txt"
+
+$ kdu_compress_fixed -quiet Clayers=1 Cycc=no -no_weights \
+           -i infile.raw\*$Z@$((X*Y*2)) -o "output.jpx" \
+           Creversible=no Mcomponents=$Z Msigned=yes \
+           Mprecision=16 Mvector_size:I2=$Z \
+           Mmatrix_size:I3=$((Z*Z)) -s "KLT_Matrix_KDU_param.txt" \
+           Mstage_inputs:I1=\{0,$((Z-1))\} \
+           Mstage_outputs:I1=\{0,$((Z-1))\} \
+           Mstage_collections:I1=\{$Z,$Z\} \
+           Mstage_xforms:I1=\{MATRIX,3,2,0,0\} Mnum_stages=1 Mstages=1 \
+           Sdims=\{$Y,$X\} Sprecision=$(cat "new_range.txt") Ssigned=yes \
+           Qstep=0.0000001 -rate $BITRATE
+\end{verbatim}%
+\vspace{-1em}%
+\end{framed}
+where \texttt{./matrix\_range\_increase.sh} is:
+\begin{framed}%
+\vspace{-1em}%
+\begin{verbatim}
+#!/bin/bash
+# Calculates the range increase produced by the KLT
+cat "$1" | transpose.pl | hexdump -ve '1/8 "%f\n"' \ 
+ | awk 'BEGIN {a=0; b=0; c='"$2"'; d='"$3"'};
+    {if ($1>0) a+=$1; else a-=$1; b++;
+     if(b == c) {b=0; print int(log(a)/log(2)-2000)+2000+d; a = 0;} };' \
+ | sed 's/-inf/1/'
+\end{verbatim}%
+\vspace{-1em}%
+\end{framed}
+
+\textbf{Note:} the read buffer of Kakadu for option files must be enlarged to allow for such a long command line.
+
+\end{itemize}
+ %--enableClustering 2 $CSIZE $CMODE $SUBSAMPLING || exit 1;
+\section{Notes}
+
+If you need further assistance, you might want to contact us directly.
+
+\bibliographystyle{IEEEtran}
+\bibliography{IEEEabrv,biblio}
+
+\end{document}
